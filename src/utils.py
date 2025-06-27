@@ -75,7 +75,7 @@ class DataProcessor:
                 "..",
                 "dataset",
                 self.cancer_name,
-                self.indicator + "_" + str(data.shape[1]) + "_" + str(thre),
+                self.indicator + "_" + str(data_drop.shape[1]) + "_" + str(thre),
             )
             data_drop.to_csv(path, index=True)
             print("筛选出的特征 {}".format(data_drop.shape))
@@ -487,20 +487,26 @@ class TransformerAutoencoder(nn.Module):
         self.eval()
 
 
-def train_model(path_dict: dict, model: nn.Module, latent_dim=30):
+def train_model(path_dict: dict, model, latent_dim=30):
     """训练癌症的特征提取模型
 
     path_state：存放癌症和对应的数据名称的字典。用来生成数据的路径
     {'癌症名' : ['组学数据1, 组学数据2 ...'], ...}
     """
     for cancer in path_dict.keys():
+        index_path = os.path.join("..", "dataset", cancer, "common_patients")
+        # 读取所有组学数据 都有的病人
+        index = pd.read_csv(index_path, index_col=1).index
         for indicator in path_dict[cancer]:
             path = os.path.join("..", "dataset", cancer, indicator)
             df = pd.read_csv(path, index_col=0)
+            df = df.loc[df.index.intersection(index)]
+            print("当前组学 {}, 读取数据，形状 {}".format(indicator, df.shape))
             num_features = df.shape[1] // 4 * 4  # 保证 特征数 是4的倍数，符合模型的形状
             data = torch.tensor(df.iloc[:, :num_features].values, dtype=torch.float)
-            model = model(num_features)
-            model.train_model(data)
-            model_path = os.path.join("..", "model", cancer, indicator)
-            os.makedirs(os.path.dirname(model_path), exist_ok=True)
-            torch.save(model.state_dict(), model_path)
+            net = model(num_features)
+            net.train_model(data)
+            save_path = os.path.join("..", "model", cancer, indicator)
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            torch.save(net.state_dict(), save_path)
+            print("model save at {}\n".format(save_path))
